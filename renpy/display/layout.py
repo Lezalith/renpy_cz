@@ -446,7 +446,7 @@ class Grid(Container):
         If None - uses config.allow_underfull_grids.
 
         @params right_to_left: True if cells should be filled
-        left to right.
+        right to left.
 
         @params bottom_to_top: True if cells should be filled
         bottom to top.
@@ -544,6 +544,7 @@ class Grid(Container):
                 offsets.append(offset)
 
         # If needed, reorder the offsets.
+        # Note: This was a different transpose in the original
         if (self.transpose or self.right_to_left or self.bottom_to_top):
             self.offsets = self.reorder(offsets)
         else:
@@ -590,39 +591,32 @@ class Grid(Container):
             self.add(null)
 
     def reorder(self, lst):
+        # # Faster option for the common case of transpose only
+        # if not (self.right_to_left or self.bottom_to_top):
+        #     return [lst[y + x * self.rows] for y in range(self.rows) for x in range(self.cols)]
+
+        row_order = list(range(self.rows))
+        if self.bottom_to_top:
+            row_order = row_order[::-1]
+
+        col_order = list(range(self.cols))
+        if self.right_to_left:
+            col_order = col_order[::-1]
+
         if self.transpose:
-
-            # Faster option for the common case of transpose only
-            if not (self.right_to_left or self.bottom_to_top):
-                return [lst[y + x * self.rows] for y in range(self.rows) for x in range(self.cols)]
-
             # Outer loop: columns; inner loop: rows.
-            col_order = list(range(self.cols))
-            if self.right_to_left:
-                col_order = col_order[::-1]
-            row_order = list(range(self.rows))
-            if self.bottom_to_top:
-                row_order = row_order[::-1]
             intended_order = [(row, col) for col in col_order for row in row_order]
-
         else:
             # Outer loop: rows; inner loop: columns.
-            row_order = list(range(self.rows))
-            if self.bottom_to_top:
-                row_order = row_order[::-1]  # reverse row order if bottom_to_top flag is True
-            col_order = list(range(self.cols))
-            if self.right_to_left:
-                col_order = col_order[::-1]  # reverse column order if right_to_left flag is True
             intended_order = [(row, col) for row in row_order for col in col_order]
         
         # Create a mapping from grid coordinate to the number that should go there.
-        grid_mapping = {}
-        for i, coord in enumerate(intended_order):
-            grid_mapping[coord] = lst[i]
+        grid_mapping = {pos: lst[i] for i, pos in enumerate(intended_order)}
         
         # Build the sorted list by reading the grid in standard order (row-major).
         standard_order = [(row, col) for row in range(self.rows) for col in range(self.cols)]
-        return [grid_mapping[coord] for coord in standard_order]
+
+        return [grid_mapping[pos] for pos in standard_order]
 
 
 class IgnoreLayers(Exception):
