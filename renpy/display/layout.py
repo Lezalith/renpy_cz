@@ -432,6 +432,8 @@ class Grid(Container):
                  transpose=False,
                  style='grid',
                  allow_underfull=None,
+                 right_to_left=False,
+                 bottom_to_top=False,
                  **properties):
         """
         @param cols: The number of columns in this widget.
@@ -442,6 +444,12 @@ class Grid(Container):
 
         @params allow_underfull: Controls if grid may be underfull.
         If None - uses config.allow_underfull_grids.
+
+        @params right_to_left: True if cells should be filled
+        left to right.
+
+        @params bottom_to_top: True if cells should be filled
+        bottom to top.
         """
 
         if padding is not None:
@@ -457,6 +465,9 @@ class Grid(Container):
 
         self.transpose = transpose
         self.allow_underfull = allow_underfull
+
+        self.right_to_left = right_to_left
+        self.bottom_to_top = bottom_to_top
 
     def render(self, width, height, st, at):
 
@@ -481,12 +492,9 @@ class Grid(Container):
         cols = self.cols
         rows = self.rows
 
-        if self.transpose:
-            children = [ ]
-            for y in range(rows):
-                for x in range(cols):
-                    children.append(self.children[y + x * rows])
-
+        # If needed, reorder the children.
+        if (self.transpose or self.right_to_left or self.bottom_to_top):
+            children = self.reorder(self.children)
         else:
             children = self.children
 
@@ -535,13 +543,21 @@ class Grid(Container):
                 offset = child.place(rv, xpos, ypos, cwidth, cheight, surf)
                 offsets.append(offset)
 
-        if self.transpose:
-            self.offsets = [ ]
-            for x in range(cols):
-                for y in range(rows):
-                    self.offsets.append(offsets[y * cols + x])
+        # If needed, reorder the offsets.
+        if (self.transpose or self.right_to_left or self.bottom_to_top):
+            self.offsets = self.reorder(offsets)
         else:
             self.offsets = offsets
+
+        #### TEST PRINT
+        ch = []
+        for window in children:
+            try:
+                ch.append(window.get_child().text[0])
+            except AttributeError:
+                ch.append("Null")
+        print(f"Grid info:\nChildren: {ch}\nOffsets: {self.offsets}")
+        #### END TEST PRINT
 
         return rv
 
@@ -572,6 +588,41 @@ class Grid(Container):
 
         for _ in range(delta):
             self.add(null)
+
+    def reorder(self, lst):
+        if self.transpose:
+
+            # Faster option for the common case of transpose only
+            if not (self.right_to_left or self.bottom_to_top):
+                return [lst[y + x * self.rows] for y in range(self.rows) for x in range(self.cols)]
+
+            # Outer loop: columns; inner loop: rows.
+            col_order = list(range(self.cols))
+            if self.right_to_left:
+                col_order = col_order[::-1]
+            row_order = list(range(self.rows))
+            if self.bottom_to_top:
+                row_order = row_order[::-1]
+            intended_order = [(row, col) for col in col_order for row in row_order]
+
+        else:
+            # Outer loop: rows; inner loop: columns.
+            row_order = list(range(self.rows))
+            if self.bottom_to_top:
+                row_order = row_order[::-1]  # reverse row order if bottom_to_top flag is True
+            col_order = list(range(self.cols))
+            if self.right_to_left:
+                col_order = col_order[::-1]  # reverse column order if right_to_left flag is True
+            intended_order = [(row, col) for row in row_order for col in col_order]
+        
+        # Create a mapping from grid coordinate to the number that should go there.
+        grid_mapping = {}
+        for i, coord in enumerate(intended_order):
+            grid_mapping[coord] = lst[i]
+        
+        # Build the sorted list by reading the grid in standard order (row-major).
+        standard_order = [(row, col) for row in range(self.rows) for col in range(self.cols)]
+        return [grid_mapping[coord] for coord in standard_order]
 
 
 class IgnoreLayers(Exception):
