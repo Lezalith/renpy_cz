@@ -494,7 +494,7 @@ class Grid(Container):
 
         # If needed, reorder the children.
         if (self.transpose or self.right_to_left or self.bottom_to_top):
-            children = self.reorder(self.children)
+            children = self.reorder_children()
         else:
             children = self.children
 
@@ -543,10 +543,12 @@ class Grid(Container):
                 offset = child.place(rv, xpos, ypos, cwidth, cheight, surf)
                 offsets.append(offset)
 
+        print(f"Offsets before reorder: {offsets}")
+
         # If needed, reorder the offsets.
         # Note: This was a different transpose in the original
         if (self.transpose or self.right_to_left or self.bottom_to_top):
-            self.offsets = self.reorder(offsets)
+            self.offsets = self.reorder_offsets(offsets)
         else:
             self.offsets = offsets
 
@@ -590,10 +592,10 @@ class Grid(Container):
         for _ in range(delta):
             self.add(null)
 
-    def reorder(self, lst):
+    def reorder_children(self):
         # # Faster option for the common case of transpose only
         # if not (self.right_to_left or self.bottom_to_top):
-        #     return [lst[y + x * self.rows] for y in range(self.rows) for x in range(self.cols)]
+        #     return [self.children[y + x * self.rows] for y in range(self.rows) for x in range(self.cols)]
 
         row_order = list(range(self.rows))
         if self.bottom_to_top:
@@ -604,19 +606,42 @@ class Grid(Container):
             col_order = col_order[::-1]
 
         if self.transpose:
-            # Outer loop: columns; inner loop: rows.
             intended_order = [(row, col) for col in col_order for row in row_order]
         else:
-            # Outer loop: rows; inner loop: columns.
             intended_order = [(row, col) for row in row_order for col in col_order]
         
-        # Create a mapping from grid coordinate to the number that should go there.
-        grid_mapping = {pos: lst[i] for i, pos in enumerate(intended_order)}
+        # Key: Grid coords, Value: Child in those coords
+        mapping = {pos: self.children[i] for i, pos in enumerate(intended_order)}
         
         # Build the sorted list by reading the grid in standard order (row-major).
         standard_order = [(row, col) for row in range(self.rows) for col in range(self.cols)]
+        return sorted_list = [mapping[pos] for pos in standard_order]
 
-        return [grid_mapping[pos] for pos in standard_order]
+    def reorder_offsets(self, offsets):
+        # Generate orders for rows (bottom_to_top) and columns (right_to_left)
+        row_order = list(range(rows))
+        if self.bottom_to_top:
+            row_order = row_order[::-1]
+        
+        col_order = list(range(cols))
+        if self.right_to_left:
+            col_order = col_order[::-1]
+        
+        if not self.transpose:
+            # Without transpose, intended order is built by rows (bottom_to_top order), then columns (right_to_left order)
+            intended_order = [(c, r) for r in row_order for c in col_order]  # (x, y) = (column, row)
+        else:
+            # With transpose, outer loop is over columns, then rows.
+            intended_order = [(c, r) for c in col_order for r in row_order]  # still (x, y)
+        
+        # Create a mapping from the intended order to the coordinate from the original list
+        mapping = {}
+        for index, pos in enumerate(intended_order):
+            mapping[pos] = offsets[index]
+        
+        # Read in standard order: left-to-right, top-to-bottom. In (x,y) terms, that's (column, row)
+        standard_order = [(c, r) for r in range(rows) for c in range(cols)]
+        return sorted_coords = [mapping[pos] for pos in standard_order]
 
 
 class IgnoreLayers(Exception):
